@@ -19,6 +19,7 @@ final class MainViewModel: ObservableObject {
     let db = DatabaseManager.shared
     private let mailSync = MailSyncService.shared
     private let keyboard = KeyboardMonitor.shared
+    private var accountsLoadGeneration = 0
 
     init() {
         Task {
@@ -67,8 +68,13 @@ final class MainViewModel: ObservableObject {
     // MARK: - Accounts
 
     func loadAccounts() async {
+        accountsLoadGeneration += 1
+        let generation = accountsLoadGeneration
+
         do {
-            accounts = try await db.fetchAccounts()
+            let loadedAccounts = try await db.fetchAccounts()
+            guard generation == accountsLoadGeneration else { return }
+            accounts = loadedAccounts
         } catch {
             print("MainViewModel: failed to load accounts: \(error)")
         }
@@ -206,14 +212,17 @@ final class MainViewModel: ObservableObject {
                 avatarURL: nil,
                 createdAt: Date()
             )
-            try await db.save(account: account)
+            let savedAccount = try await db.save(account: account)
             await loadAccounts()
-            selectedAccount = account
+            if !accounts.contains(where: { $0.email == savedAccount.email }) {
+                accounts.append(savedAccount)
+            }
+            selectedAccount = accounts.first(where: { $0.email == savedAccount.email })
             await loadEmails()
             // Kick off initial sync.
             Task { await syncAllAccounts() }
         } catch {
-            print("MainViewModel: add account failed: \(error)")
+            print("MainViewModel: add account failed: \(error.localizedDescription)")
             syncStatusMessage = "Auth failed: \(error.localizedDescription)"
         }
     }

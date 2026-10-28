@@ -38,17 +38,35 @@ final class GmailAPIClient {
         return try decoder.decode(T.self, from: data)
     }
 
+    private func validateResponse(_ response: URLResponse, data: Data) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailError.invalidHTTPResponse
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let reason: String?
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let error = json["error"] as? [String: Any],
+               let message = error["message"] as? String {
+                let sanitized = String(message.unicodeScalars.filter {
+                    !CharacterSet.controlCharacters.contains($0)
+                })
+                reason = sanitized.isEmpty ? nil : String(sanitized.prefix(300))
+            } else {
+                reason = nil
+            }
+            throw GmailError.requestFailed(statusCode: httpResponse.statusCode, reason: reason)
+        }
+    }
+
     // MARK: - Profile
 
     func getProfile(accessToken: String) async throws -> GmailProfile {
-        var request = try authenticatedRequest(
+        let request = try authenticatedRequest(
             url: URL(string: "\(baseURL)/users/me/profile")!,
             accessToken: accessToken
         )
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw GmailError.requestFailed
-        }
+        try validateResponse(response, data: data)
         return try decodeResponse(data)
     }
 
@@ -78,14 +96,12 @@ final class GmailAPIClient {
         }
         components.queryItems = items
 
-        var request = try authenticatedRequest(
+        let request = try authenticatedRequest(
             url: components.url!,
             accessToken: accessToken
         )
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw GmailError.requestFailed
-        }
+        try validateResponse(response, data: data)
         return try decodeResponse(data)
     }
 
@@ -95,14 +111,12 @@ final class GmailAPIClient {
         accessToken: String,
         messageId: String
     ) async throws -> GmailMessage {
-        var request = try authenticatedRequest(
+        let request = try authenticatedRequest(
             url: URL(string: "\(baseURL)/users/me/messages/\(messageId)?format=full")!,
             accessToken: accessToken
         )
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw GmailError.requestFailed
-        }
+        try validateResponse(response, data: data)
         return try decodeResponse(data)
     }
 
@@ -127,16 +141,14 @@ final class GmailAPIClient {
         let encoder = JSONEncoder()
         let httpBody = try encoder.encode(body)
 
-        var request = try authenticatedRequest(
+        let request = try authenticatedRequest(
             url: URL(string: "\(baseURL)/users/me/messages/batchModify")!,
             method: "POST",
             accessToken: accessToken,
             body: httpBody
         )
-        let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw GmailError.requestFailed
-        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
     }
 
     /// Archive a single message remotely.
@@ -176,16 +188,27 @@ final class GmailAPIClient {
         )
         let body = ["raw": rawMessage]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw GmailError.requestFailed
-        }
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
     }
 }
 
-enum GmailError: Error {
-    case requestFailed
+enum GmailError: LocalizedError {
+    case requestFailed(statusCode: Int, reason: String?)
     case invalidResponse
+    case invalidHTTPResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .requestFailed(let statusCode, let reason):
+            let details = reason.map { ": \($0)" } ?? ""
+            return "Gmail API request failed (HTTP \(statusCode)\(details))."
+        case .invalidResponse:
+            return "Gmail returned an invalid response."
+        case .invalidHTTPResponse:
+            return "Gmail returned a non-HTTP response."
+        }
+    }
 }
 
 // MARK: - Gmail API model types

@@ -5,6 +5,8 @@ import GRDB
 /// OAuth tokens are stored in the Keychain, not in the database.
 struct Account: Codable, FetchableRecord, PersistableRecord, Identifiable {
     static var databaseTableName = "accounts"
+    static let databaseColumnEncodingStrategy = DatabaseColumnEncodingStrategy.convertToSnakeCase
+    static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
 
     var id: Int64?
     var email: String
@@ -12,8 +14,12 @@ struct Account: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var avatarURL: String?
     var createdAt: Date
 
-    enum Columns: String, ColumnExpression {
-        case id, email, displayName, avatarURL, createdAt
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let email = Column(CodingKeys.email)
+        static let displayName = Column("display_name")
+        static let avatarURL = Column("avatar_url")
+        static let createdAt = Column("created_at")
     }
 
     init(id: Int64? = nil, email: String, displayName: String, avatarURL: String? = nil, createdAt: Date = Date()) {
@@ -28,6 +34,8 @@ struct Account: Codable, FetchableRecord, PersistableRecord, Identifiable {
 /// An email message, stored locally for instant UI rendering.
 struct Email: Codable, FetchableRecord, PersistableRecord, Identifiable {
     static var databaseTableName = "emails"
+    static let databaseColumnEncodingStrategy = DatabaseColumnEncodingStrategy.convertToSnakeCase
+    static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
 
     /// Gmail message ID (unique within an account)
     var id: String
@@ -46,10 +54,22 @@ struct Email: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var isStarred: Bool
     var category: EmailCategory
 
-    enum Columns: String, ColumnExpression {
-        case id, threadId, accountId, senderName, senderEmail, recipientEmails,
-             subject, snippet, bodyHTML, bodyText, receivedAt,
-             isRead, isArchived, isStarred, category
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let threadId = Column("thread_id")
+        static let accountId = Column("account_id")
+        static let senderName = Column("sender_name")
+        static let senderEmail = Column("sender_email")
+        static let recipientEmails = Column("recipient_emails")
+        static let subject = Column(CodingKeys.subject)
+        static let snippet = Column(CodingKeys.snippet)
+        static let bodyHTML = Column("body_html")
+        static let bodyText = Column("body_text")
+        static let receivedAt = Column("received_at")
+        static let isRead = Column("is_read")
+        static let isArchived = Column("is_archived")
+        static let isStarred = Column("is_starred")
+        static let category = Column(CodingKeys.category)
     }
 
     init(
@@ -111,6 +131,8 @@ enum EmailCategory: String, Codable, CaseIterable, DatabaseValueConvertible {
 /// A pending offline action that must be synchronized with Gmail.
 struct SyncQueueItem: Codable, FetchableRecord, PersistableRecord {
     static var databaseTableName = "sync_queue"
+    static let databaseColumnEncodingStrategy = DatabaseColumnEncodingStrategy.convertToSnakeCase
+    static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
 
     var id: Int64?
     var accountId: Int64
@@ -120,8 +142,14 @@ struct SyncQueueItem: Codable, FetchableRecord, PersistableRecord {
     var retryCount: Int
     var timestamp: Date
 
-    enum Columns: String, ColumnExpression {
-        case id, accountId, actionType, targetEmailId, status, retryCount, timestamp
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let accountId = Column("account_id")
+        static let actionType = Column("action_type")
+        static let targetEmailId = Column("target_email_id")
+        static let status = Column(CodingKeys.status)
+        static let retryCount = Column("retry_count")
+        static let timestamp = Column(CodingKeys.timestamp)
     }
 
     init(

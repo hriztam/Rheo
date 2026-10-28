@@ -11,6 +11,7 @@ final class OAuthManager {
 
     // Gmail OAuth configuration
     private let clientID: String
+    private let clientSecret: String?
     private let environmentFileError: Error?
     private let scopes = "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
 
@@ -29,6 +30,13 @@ final class OAuthManager {
             ?? envFileValues["GMAIL_CLIENT_ID"]
             ?? Bundle.main.object(forInfoDictionaryKey: "GMAIL_CLIENT_ID") as? String
             ?? ""
+        let configuredClientSecret = environment["GMAIL_CLIENT_SECRET"]
+            ?? envFileValues["GMAIL_CLIENT_SECRET"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "GMAIL_CLIENT_SECRET") as? String
+        self.clientSecret = configuredClientSecret.flatMap { value in
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedValue.isEmpty ? nil : trimmedValue
+        }
     }
 
     private static func loadEnvironmentFile() throws -> [String: String] {
@@ -175,20 +183,28 @@ final class OAuthManager {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        request.httpBody = Self.formBody([
+        var parameters = [
             "code": code,
             "client_id": clientID,
             "redirect_uri": redirectURI,
             "code_verifier": codeVerifier,
             "grant_type": "authorization_code"
-        ])
+        ]
+        if let clientSecret {
+            parameters["client_secret"] = clientSecret
+        }
+        request.httpBody = Self.formBody(parameters)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode)
-        else {
-            throw OAuthError.tokenExchangeFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OAuthError.invalidTokenHTTPResponse
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw OAuthError.tokenExchangeFailed(
+                statusCode: httpResponse.statusCode,
+                reason: Self.oauthErrorReason(from: data)
+            )
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -208,17 +224,37 @@ final class OAuthManager {
         return Data((components.percentEncodedQuery ?? "").utf8)
     }
 
+    private static func oauthErrorReason(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let details = ["error", "error_description"].compactMap { key -> String? in
+            guard let value = json[key] as? String else { return nil }
+            let sanitized = String(value.unicodeScalars.filter {
+                !CharacterSet.controlCharacters.contains($0)
+            })
+            guard !sanitized.isEmpty else { return nil }
+            return String(sanitized.prefix(300))
+        }
+        return details.isEmpty ? nil : details.joined(separator: ": ")
+    }
+
     /// Refreshes an access token using a stored refresh token.
     func refreshAccessToken(refreshToken: String) async throws -> String {
         var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        request.httpBody = Self.formBody([
+        var parameters = [
             "client_id": clientID,
             "refresh_token": refreshToken,
             "grant_type": "refresh_token"
-        ])
+        ]
+        if let clientSecret {
+            parameters["client_secret"] = clientSecret
+        }
+        request.httpBody = Self.formBody(parameters)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -411,7 +447,7 @@ private final class LoopbackOAuthCallbackServer: @unchecked Sendable {
 
         sendResponse(
             status: "200 OK",
-            message: "Sign-in complete. You can close this tab and return to Keyboard Mail.",
+            message: "Sign-in complete. You can close this tab and return to Rheo.",
             on: connection,
             completion: { self.finishCallback(returning: url) }
         )
@@ -424,7 +460,7 @@ private final class LoopbackOAuthCallbackServer: @unchecked Sendable {
         completion: @escaping () -> Void = {}
     ) {
         let body = """
-        <!doctype html><html><head><meta charset="utf-8"><title>Keyboard Mail</title></head>
+        <!doctype html><html><head><meta charset="utf-8"><title>Rheo</title></head>
         <body><p>\(message)</p></body></html>
         """
         let response = [
@@ -453,16 +489,17 @@ enum OAuthError: LocalizedError {
     case invalidOAuthCallback
     case authorizationDenied(String)
     case missingAuthCode
-    case tokenExchangeFailed
+    case invalidTokenHTTPResponse
+    case tokenExchangeFailed(statusCode: Int, reason: String?)
     case tokenRefreshFailed
     case invalidTokenResponse
 
     var errorDescription: String? {
         switch self {
         case .missingClientID:
-            return "GMAIL_CLIENT_ID is missing. Add your Google Desktop OAuth client ID to KeyboardMail/.env."
+            return "GMAIL_CLIENT_ID is missing. Add your Google Desktop OAuth client ID to .env."
         case .invalidEnvironmentFileLine(let line):
-            return "KeyboardMail/.env has an invalid entry on line \(line). Use KEY=value format."
+            return ".env has an invalid entry on line \(line). Use KEY=value format."
         case .invalidAuthURL:
             return "Could not create the Google sign-in URL."
         case .randomGenerationFailed:
@@ -479,8 +516,11 @@ enum OAuthError: LocalizedError {
             return "Google sign-in was not completed: \(reason)."
         case .missingAuthCode:
             return "Google did not return an authorization code."
-        case .tokenExchangeFailed:
-            return "Google rejected the authorization code. Check that the OAuth client is a Desktop app and try again."
+        case .invalidTokenHTTPResponse:
+            return "Google returned an invalid response while exchanging the authorization code."
+        case .tokenExchangeFailed(let statusCode, let reason):
+            let details = reason.map { ": \($0)" } ?? ""
+            return "Google rejected the authorization code (HTTP \(statusCode)\(details)). Check that the OAuth client is a Desktop app and try again."
         case .tokenRefreshFailed:
             return "Google rejected the saved refresh token. Sign in to the account again."
         case .invalidTokenResponse:

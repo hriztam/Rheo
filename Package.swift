@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "KeyboardMail",
+    name: "Rheo",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .executable(
-            name: "KeyboardMail",
-            targets: ["KeyboardMailApp"]
+            name: "Rheo",
+            targets: ["RheoApp"]
         )
     ],
     dependencies: [
@@ -17,7 +17,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "KeyboardMailApp",
+            name: "RheoApp",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift")
             ],

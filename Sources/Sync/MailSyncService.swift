@@ -39,7 +39,11 @@ actor MailSyncService {
         }
 
         // Ensure account info is up to date locally.
-        try? await db.save(account: account)
+        do {
+            _ = try await db.save(account: account)
+        } catch {
+            print("MailSyncService: failed to update account \(account.email): \(error)")
+        }
 
         do {
             try await syncThreads(accessToken: accessToken, accountId: account.id!)

@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct KeyboardMailApp: App {
+struct RheoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
-        Window("Keyboard Mail", id: "main") {
+        Window("Rheo", id: "main") {
             ContentView()
         }
         .windowStyle(.titleBar)

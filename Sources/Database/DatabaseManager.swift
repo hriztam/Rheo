@@ -18,25 +18,37 @@ actor DatabaseManager {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first!
-        let appDir = appSupport.appendingPathComponent("KeyboardMail", isDirectory: true)
+        let appDir = appSupport.appendingPathComponent("Rheo", isDirectory: true)
+        let legacyDir = appSupport.appendingPathComponent("KeyboardMail", isDirectory: true)
+
         try? FileManager.default.createDirectory(
             at: appDir,
             withIntermediateDirectories: true,
             attributes: nil
         )
-        self.dbPath = appDir.appendingPathComponent("keyboardmail.sqlite").path
+
+        let targetDBPath = appDir.appendingPathComponent("rheo.sqlite").path
+        let legacyDBPath = legacyDir.appendingPathComponent("keyboardmail.sqlite").path
+
+        // Migrate legacy database file if new one does not exist yet
+        if !FileManager.default.fileExists(atPath: targetDBPath) && FileManager.default.fileExists(atPath: legacyDBPath) {
+            try? FileManager.default.copyItem(atPath: legacyDBPath, toPath: targetDBPath)
+        }
+
+        self.dbPath = targetDBPath
 
         // Open the database and run migrations during initialization.
         do {
-            self.dbQueue = try DatabaseQueue(path: self.dbPath)
-            try self.migrator.migrate(self.dbQueue)
+            let queue = try DatabaseQueue(path: self.dbPath)
+            try Self.migrator.migrate(queue)
+            self.dbQueue = queue
         } catch {
             fatalError("Failed to open database: \(error)")
         }
     }
 
     /// The GRDB migrator with all schema versions.
-    private var migrator: DatabaseMigrator {
+    private static var migrator: DatabaseMigrator {
         var m = DatabaseMigrator()
 
         // v1 — Initial schema
@@ -91,9 +103,12 @@ actor DatabaseManager {
     // MARK: - Writes (instant, never wait for network)
 
     /// Insert or update an account.
-    func save(account: Account) throws {
+    func save(account: Account) throws -> Account {
         try dbQueue.write { db in
-            try account.insert(db)
+            guard let savedAccount = try account.saveAndFetch(db) else {
+                throw DatabaseManagerError.savedAccountNotFound
+            }
+            return savedAccount
         }
     }
 
@@ -120,6 +135,10 @@ actor DatabaseManager {
             if let isStarred { email.isStarred = isStarred }
             try email.update(db)
         }
+    }
+
+    private enum DatabaseManagerError: Error {
+        case savedAccountNotFound
     }
 
     /// Archive an email (optimistic UI update).

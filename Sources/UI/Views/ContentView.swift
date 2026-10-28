@@ -193,7 +193,7 @@ struct AccountSetupView: View {
             Image(systemName: "envelope.fill")
                 .font(.system(size: 64))
                 .foregroundColor(.accentColor)
-            Text("Keyboard Mail")
+            Text("Rheo")
                 .font(.largeTitle).fontWeight(.bold)
             Text("Connect your Gmail account to get started.")
                 .foregroundColor(.secondary)
