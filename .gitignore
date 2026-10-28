@@ -1,6 +1,9 @@
 # Swift Package Manager
 .build/
 .swiftpm/
+.env
+.env.*
+!.env.example
 
 # Xcode
 DerivedData/
