@@ -222,7 +222,7 @@ struct GmailProfile: Decodable {
 
 struct GmailThread: Decodable {
     var id: String
-    var snippet: String
+    var snippet: String?
 }
 
 struct GmailMessage: Decodable {
@@ -230,13 +230,37 @@ struct GmailMessage: Decodable {
     var threadId: String
     var labelIds: [String]
     var snippet: String
-    var internalDate: Int64?   // epoch milliseconds
+    var internalDate: String?   // epoch milliseconds (Gmail API returns int64 as decimal string)
     var payload: GmailMessagePart?
-    var sizeEstimate: Int
+    var sizeEstimate: Int?
 
     var receivedAt: Date {
-        guard let internalDate = internalDate else { return Date() }
-        return Date(timeIntervalSince1970: TimeInterval(internalDate) / 1000.0)
+        guard let internalDate = internalDate, let ms = Double(internalDate) else { return Date() }
+        return Date(timeIntervalSince1970: ms / 1000.0)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, threadId, labelIds, snippet, internalDate, payload, sizeEstimate
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        threadId = try container.decode(String.self, forKey: .threadId)
+        labelIds = try container.decodeIfPresent([String].self, forKey: .labelIds) ?? []
+        snippet = try container.decodeIfPresent(String.self, forKey: .snippet) ?? ""
+        payload = try container.decodeIfPresent(GmailMessagePart.self, forKey: .payload)
+        sizeEstimate = try container.decodeIfPresent(Int.self, forKey: .sizeEstimate)
+
+        // Gmail API serializes 64-bit integers as decimal strings in JSON to avoid precision loss in JavaScript,
+        // but we handle both String and Int64 formats gracefully.
+        if let stringDate = try? container.decodeIfPresent(String.self, forKey: .internalDate) {
+            internalDate = stringDate
+        } else if let intDate = try? container.decodeIfPresent(Int64.self, forKey: .internalDate) {
+            internalDate = String(intDate)
+        } else {
+            internalDate = nil
+        }
     }
 }
 
