@@ -350,16 +350,17 @@ extension GmailMessage {
 }
 
 extension Data {
-    /// Decodes base64url (Gmail uses URL-safe base64 without padding).
+    /// Decodes base64url or standard base64 (handling URL-safe characters, missing padding, newlines).
     init?(base64URLEncoded string: String) {
         var base64 = string
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let remainder = base64.count % 4
         if remainder > 0 {
             base64 = base64.padding(toLength: base64.count + 4 - remainder,
-                                    withPad: " ", startingAt: 0)
+                                    withPad: "=", startingAt: 0)
         }
-        self.init(base64Encoded: base64)
+        self.init(base64Encoded: base64, options: .ignoreUnknownCharacters)
     }
 }

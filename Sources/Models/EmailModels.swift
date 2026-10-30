@@ -109,6 +109,21 @@ struct Email: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var recipientList: [String] {
         recipientEmails.jsonDecoded ?? []
     }
+
+    /// Clean decoded subject for UI presentation
+    var displaySubject: String {
+        subject.decodingHTMLEntities
+    }
+
+    /// Clean decoded snippet for UI presentation
+    var displaySnippet: String {
+        snippet.decodingHTMLEntities
+    }
+
+    /// Clean decoded sender name for UI presentation
+    var displaySenderName: String {
+        senderName.decodingHTMLEntities
+    }
 }
 
 /// Smart email categories matching the Superhuman-inspired inbox.

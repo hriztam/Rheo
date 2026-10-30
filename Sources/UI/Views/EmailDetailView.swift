@@ -14,94 +14,109 @@ struct EmailDetailView: View {
             if let email = viewModel.selectedEmail {
                 VStack(alignment: .leading, spacing: 0) {
                     // Header bar
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(email.subject)
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                            HStack(spacing: 8) {
-                                Text(email.senderName)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Text(email.senderEmail)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            HStack(spacing: 8) {
-                                Label {
-                                    Text(email.receivedAt, style: .date)
-                                } icon: {
-                                    Image(systemName: "clock")
-                                }
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(email.displaySubject)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                            .lineLimit(3)
 
-                                CategoryBadge(category: email.category)
+                        HStack(alignment: .center, spacing: 10) {
+                            // Sender Avatar
+                            Circle()
+                                .fill(LinearGradient(
+                                    colors: [Color.blue.opacity(0.8), Color.indigo.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text(email.displaySenderName.prefix(1).uppercased())
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                )
 
-                                Spacer(minLength: 0)
-
+                            VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 6) {
-                                    DetailActionButton(icon: "archivebox", label: "Archive") {
-                                        Task { await viewModel.archive(emailID: email.id) }
+                                    Text(email.displaySenderName)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.primary)
+                                    Text("<\(email.senderEmail)>")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                }
+
+                                HStack(spacing: 8) {
+                                    Label {
+                                        Text(email.receivedAt, style: .date) + Text(", ") + Text(email.receivedAt, style: .time)
+                                    } icon: {
+                                        Image(systemName: "calendar")
                                     }
-                                    DetailActionButton(icon: "trash", label: "Delete") {
-                                        Task { await viewModel.delete(emailID: email.id) }
-                                    }
-                                    DetailActionButton(icon: "envelope.open", label: "Read") {
-                                        Task { await viewModel.markRead(email.id) }
-                                    }
-                                    StarButton(email: email, viewModel: viewModel)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                    CategoryBadge(category: email.category)
                                 }
                             }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(20)
-                    .background(.regularMaterial, in: Rectangle())
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(Color.secondary.opacity(0.2))
-                            .frame(height: 1)
-                    }
 
-                    // Body
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            if let html = email.bodyHTML, !html.isEmpty {
-                                HTMLView(html: html)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            } else if let text = email.bodyText, !text.isEmpty {
-                                Text(text)
-                                    .font(.body)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .textSelection(.enabled)
-                            } else {
-                                Text(email.snippet)
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            Spacer(minLength: 0)
+
+                            // Quick actions
+                            HStack(spacing: 6) {
+                                DetailActionButton(icon: "archivebox", label: "Archive (E)") {
+                                    Task { await viewModel.archive(emailID: email.id) }
+                                }
+                                DetailActionButton(icon: "trash", label: "Delete (⌫)") {
+                                    Task { await viewModel.delete(emailID: email.id) }
+                                }
+                                DetailActionButton(icon: email.isRead ? "envelope" : "envelope.open", label: email.isRead ? "Mark as Unread" : "Mark as Read (M)") {
+                                    Task { await viewModel.markRead(email.id) }
+                                }
+                                StarButton(email: email, viewModel: viewModel)
                             }
                         }
-                        .padding(20)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+                    .overlay(alignment: .bottom) {
+                        Divider()
+                    }
+
+                    // Body: Full native WKWebView rendering
+                    if let html = email.bodyHTML, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HTMLView(content: .html(html))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let text = email.bodyText, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HTMLView(content: .plainText(text))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        HTMLView(content: .plainText(email.displaySnippet))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
             } else {
                 emptyState
             }
         }
-        .frame(minWidth: 300)
+        .frame(minWidth: 320)
     }
 
     var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "envelope")
-                .font(.system(size: 56))
+            Image(systemName: "envelope.open")
+                .font(.system(size: 48, weight: .light))
+                .foregroundColor(.secondary.opacity(0.6))
+            Text("No Conversation Selected")
+                .font(.title3)
+                .fontWeight(.medium)
                 .foregroundColor(.secondary)
-            Text("Select an email to read it")
-                .font(.headline)
-                .foregroundColor(.secondary)
+            Text("Select an email from the list to read it.")
+                .font(.subheadline)
+                .foregroundColor(.secondary.opacity(0.8))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.textBackgroundColor))
     }
 }
 
@@ -113,34 +128,40 @@ struct CategoryBadge: View {
         Text(category.localizedTitle)
             .font(.caption2)
             .fontWeight(.medium)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(categoryColor.opacity(0.15), in: Capsule())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(categoryColor.opacity(0.12), in: Capsule())
             .foregroundColor(categoryColor)
     }
 
     var categoryColor: Color {
         switch category {
         case .important:    return .blue
-        case .newsletters:  return .green
-        case .promotions:   return .orange
+        case .newsletters:  return .teal
+        case .promotions:   return .purple
         case .spam:         return .red
         }
     }
 }
 
-/// A toolbar action button (global keyboard shortcuts are handled by KeyboardMonitor).
+/// A toolbar action button with nice hover and active state.
 struct DetailActionButton: View {
     let icon: String
     let label: String
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.callout)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(isHovered ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(isHovered ? Color.secondary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .help(label)
     }
 }
@@ -149,6 +170,7 @@ struct DetailActionButton: View {
 struct StarButton: View {
     let email: Email
     @ObservedObject var viewModel: MainViewModel
+    @State private var isHovered = false
 
     var body: some View {
         Button {
@@ -157,42 +179,57 @@ struct StarButton: View {
             }
         } label: {
             Image(systemName: email.isStarred ? "star.fill" : "star")
-                .font(.callout)
-                .foregroundColor(email.isStarred ? .yellow : .secondary)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(email.isStarred ? .yellow : (isHovered ? .primary : .secondary))
+                .frame(width: 28, height: 28)
+                .background(isHovered ? Color.secondary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .help(email.isStarred ? "Unstar" : "Star")
     }
 }
 
-/// Renders HTML email content using WebKit (AppKit interop).
+/// Content representation for HTMLView
+enum HTMLContent {
+    case html(String)
+    case plainText(String)
+}
+
+/// Renders HTML or linkified plain-text email content using WebKit.
 struct HTMLView: NSViewRepresentable {
-    let html: String
+    let content: HTMLContent
+
+    init(content: HTMLContent) {
+        self.content = content
+    }
+
+    init(html: String) {
+        self.content = .html(html)
+    }
+
+    init(plainText: String) {
+        self.content = .plainText(plainText)
+    }
 
     func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.allowsLinkPreview = false
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.allowsLinkPreview = true
         webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground") // Transparent background matching system theme
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let wrapped = """
-        <html>
-        <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-                 font-size: 14px; line-height: 1.5; color: #1d1d1f; margin: 0; }
-          a { color: #0066cc; text-decoration: none; }
-          a:hover { text-decoration: underline; }
-          img { max-width: 100%; height: auto; }
-        </style>
-        </head>
-        <body>\(html)</body>
-        </html>
-        """
-        webView.loadHTMLString(wrapped, baseURL: nil)
+        let htmlPayload: String
+        switch content {
+        case .html(let rawHtml):
+            htmlPayload = wrapHTML(rawHtml)
+        case .plainText(let text):
+            htmlPayload = wrapPlainText(text)
+        }
+        webView.loadHTMLString(htmlPayload, baseURL: nil)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -205,7 +242,7 @@ struct HTMLView: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            // Open links externally rather than inside the web view.
+            // Open user clicked links externally in default browser (Safari, Chrome, etc.)
             if navigationAction.navigationType == .linkActivated {
                 decisionHandler(.cancel)
                 if let url = navigationAction.request.url {
@@ -215,5 +252,89 @@ struct HTMLView: NSViewRepresentable {
             }
             decisionHandler(.allow)
         }
+    }
+
+    private func wrapHTML(_ html: String) -> String {
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+        <style>
+          :root {
+            color-scheme: light dark;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 20px 24px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            color: -apple-system-label;
+            background-color: transparent;
+          }
+          a {
+            color: #007aff;
+            text-decoration: none;
+            word-break: break-all;
+          }
+          a:hover {
+            text-decoration: underline;
+          }
+          img {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+          table {
+            max-width: 100% !important;
+          }
+          pre, code {
+            font-family: "SF Mono", Menlo, Consolas, Monaco, monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+          }
+          blockquote {
+            margin: 12px 0;
+            padding-left: 12px;
+            border-left: 3px solid rgba(128, 128, 128, 0.4);
+            color: -apple-system-secondary-label;
+          }
+        </style>
+        </head>
+        <body>
+        \(html)
+        </body>
+        </html>
+        """
+    }
+
+    private func wrapPlainText(_ text: String) -> String {
+        // Convert URLs into clickable HTML links and preserve linebreaks
+        let escaped = text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+
+        // Linkify URLs: https?://...
+        let pattern = "(https?:\\/\\/[^\\s<>\"]+)"
+        let linkified: String
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let range = NSRange(location: 0, length: escaped.utf16.count)
+            linkified = regex.stringByReplacingMatches(
+                in: escaped,
+                options: [],
+                range: range,
+                withTemplate: "<a href=\"$1\">$1</a>"
+            )
+        } else {
+            linkified = escaped
+        }
+
+        let formatted = linkified.replacingOccurrences(of: "\n", with: "<br>\n")
+        return wrapHTML("<div style=\"white-space: normal;\">\(formatted)</div>")
     }
 }

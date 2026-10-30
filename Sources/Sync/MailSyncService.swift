@@ -85,15 +85,21 @@ actor MailSyncService {
             hasSpamLabel: message.labelIds.contains("SPAM")
         )
 
+        let rawSubject = message.header("Subject") ?? "(No Subject)"
+        let rawSnippet = message.snippet
+        let cleanSubject = rawSubject.decodingHTMLEntities
+        let cleanSnippet = rawSnippet.decodingHTMLEntities
+        let cleanSenderName = (message.senderName ?? "Unknown").decodingHTMLEntities
+
         let email = Email(
             id: message.id,
             threadId: message.threadId,
             accountId: accountId,
-            senderName: message.senderName ?? "Unknown",
+            senderName: cleanSenderName,
             senderEmail: message.senderEmail ?? "",
             recipientEmails: [], // Gmail API 'full' format doesn't include To in headers reliably; parsed below
-            subject: message.header("Subject") ?? "(No Subject)",
-            snippet: message.snippet,
+            subject: cleanSubject,
+            snippet: cleanSnippet,
             bodyHTML: message.htmlBody(),
             bodyText: message.plainTextBody(),
             receivedAt: message.receivedAt,
